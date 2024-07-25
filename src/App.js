@@ -28,8 +28,8 @@ const App = () => {
   const [results, setResults] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [cart, setCart] = useState([]); // State for cart items
-  const [isCartOpen, setIsCartOpen] = useState(false); // State for sidebar visibility
+  const [cart, setCart] = useState([]); 
+  const [debounceTimer, setDebounceTimer] = useState(null);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -93,7 +93,8 @@ const App = () => {
           ...updatedCart[existingItemIndex],
           volume: item.volume,
           unitPrice: (item.unitPrice / item.volume) * item.volume,
-          totalPrice: (item.unitPrice / item.volume) * item.volume * item.volume
+          totalPrice: (item.unitPrice / item.volume) * item.volume * item.volume,
+          loading: false // Add loading state
         };
         return updatedCart;
       } else {
@@ -102,7 +103,8 @@ const App = () => {
           ...item,
           volume: item.volume,
           unitPrice: (item.unitPrice / item.volume) * item.volume,
-          totalPrice: (item.unitPrice / item.volume) * item.volume * item.volume
+          totalPrice: (item.unitPrice / item.volume) * item.volume * item.volume,
+          loading: false // Add loading state
         }];
       }
     });
@@ -117,11 +119,43 @@ const App = () => {
         updatedCart[index] = {
           ...updatedCart[index],
           volume: newVolume,
-          unitPrice: (updatedCart[index].unitPrice / updatedCart[index].volume) * newVolume,
-          totalPrice: (updatedCart[index].unitPrice / updatedCart[index].volume) * newVolume * newVolume
+          loading: true // Set loading state
         };
         return updatedCart;
       });
+
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      const timer = setTimeout(async () => {
+        try {
+          const partNumber = cart[index].manufacturerPartNumber;
+          const response = await axios.post('http://localhost:5000/compare', {
+            partNumber: partNumber,
+            volume: newVolume
+          });
+
+          if (response.data && response.data.length > 0) {
+            const updatedItem = response.data[0]; // Assuming the response contains the updated unit price and total price
+
+            setCart(prevCart => {
+              const updatedCart = [...prevCart];
+              updatedCart[index] = {
+                ...updatedCart[index],
+                unitPrice: updatedItem.unitPrice,
+                totalPrice: updatedItem.totalPrice,
+                loading: false // Reset loading state
+              };
+              return updatedCart;
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching updated prices:', error);
+        }
+      }, 2000);
+
+      setDebounceTimer(timer);
     }
   };
 
@@ -134,13 +168,13 @@ const App = () => {
       <Box textAlign="center" p={5}>
         <Box position="absolute" top={5} right={5}>
           <Button onClick={isOpen ? onClose : onOpen} colorScheme="teal">
-           Open Cart
+            Open Cart
           </Button>
         </Box>
 
         <Text fontSize="4xl" as='b' mb={5}>ZIONIX APP</Text>
 
-        <Box mb={5}  maxW="600px" mx="auto" display="flex" flexDirection="column" alignItems="center">
+        <Box mb={5} maxW="600px" mx="auto" display="flex" flexDirection="column" alignItems="center">
           <Input 
             placeholder="Part No." 
             value={partNumber} 
@@ -181,8 +215,8 @@ const App = () => {
                   <Td>{item.manufacturer}</Td>
                   <Td>{item.dataProvider}</Td>
                   <Td>{item.volume}</Td>
-                  <Td>{item.unitPrice.toFixed(2)}</Td>
-                  <Td>{item.totalPrice.toFixed(2)}</Td>
+                  <Td>{item.unitPrice.toFixed(5)}</Td>
+                  <Td>{item.totalPrice.toFixed(5)}</Td>
                   <Td>
                     {index === 0 && (
                       <Button onClick={() => handleAddToCart(item)} colorScheme="teal">
@@ -199,83 +233,83 @@ const App = () => {
         {loading && <Spinner size="xl" mt={5} />}
 
         {isOpen && cart.length > 0 && (
- <Box 
- position="fixed" 
- top={0} 
- right={0} 
- width="300px" 
- height="100%" 
- bg="gray.800" 
- color="white" 
- p={5} 
- boxShadow="lg"
- overflowY="auto" 
- 
->
- <Text fontSize="2xl" as='b' mb={4} textAlign="center" color="white">MY CART</Text>
- <Stack spacing={4} mb={4} align="center">
-   {cart.map((item, index) => (
-     <Card 
-       key={index} 
-       borderWidth="1px" 
-       borderRadius="md" 
-       bg="gray.700" 
-       p={4}
-       width="100%" // Ensure the Card takes full width available
-     >
-       <CardHeader>
-         <Text fontSize="lg" fontWeight="bold" color="white">
-           {item.manufacturerPartNumber}
-         </Text>
-       </CardHeader>
-       <CardBody>
-         <Text mb={2} color="white"><b>Manufacturer:</b> {item.manufacturer}</Text>
-         <Text mb={2} color="white"><b>Data Provider:</b> {item.dataProvider}</Text>
-         <Text mb={2} color="white">
-           <b>Volume:</b>
-           <Box alignItems="center" >
-             <Input 
-               type="number" 
-               value={item.volume} 
-               onChange={(e) => handleVolumeChange(index, e)} 
-               size="sm" 
-               mx="auto" 
-               color="white" // Change input text color if needed
-               variant="outline" // Add variant to ensure it has proper styling
-             />
-           </Box>
-         </Text>
-         <Text mb={2} color="white"><b>Unit Price:</b> {item.unitPrice.toFixed(2)}</Text>
-         <Text mb={4} color="white"><b>Total Price:</b> {item.totalPrice.toFixed(2)}</Text>
-       </CardBody>
-       <CardFooter>
-     
-           <Button 
-             onClick={() => handleRemoveFromCart(index)} 
-             colorScheme="red" 
-             size="sm"
-             textAlign="center" 
-             width="100%" 
-           >
-             Remove
-           </Button>
-         
-       </CardFooter>
-     </Card>
-   ))}
- </Stack>
- <Button 
-   onClick={onClose} 
-   colorScheme="teal" 
-   width="100%"
- >
-   Close
- </Button>
-</Box>
-
-)}
-
-
+          <Box 
+            position="fixed" 
+            top={0} 
+            right={0} 
+            width="300px" 
+            height="100%" 
+            bg="gray.800" 
+            color="white" 
+            p={5} 
+            boxShadow="lg"
+            overflowY="auto"
+          >
+            <Text fontSize="2xl" as='b' mb={4} textAlign="center" color="white">MY CART</Text>
+            <Stack spacing={4} mb={4} align="center">
+              {cart.map((item, index) => (
+                <Card 
+                  key={index} 
+                  borderWidth="1px" 
+                  borderRadius="md" 
+                  bg="gray.700" 
+                  p={4}
+                  width="100%" // Ensure the Card takes full width available
+                >
+                  <CardHeader>
+                    <Text fontSize="lg" fontWeight="bold" color="white">
+                      {item.manufacturerPartNumber}
+                    </Text>
+                  </CardHeader>
+                  <CardBody>
+                    <Text mb={2} color="white"><b>Manufacturer</b> {item.manufacturer}</Text>
+                    <Text mb={2} color="white"><b>Data Provider</b> {item.dataProvider}</Text>
+                    <Text mb={2} color="white">
+                      <b>Volume</b>
+                      <Box alignItems="center" >
+                        <Input 
+                          type="number" 
+                          value={item.volume} 
+                          onChange={(e) => handleVolumeChange(index, e)} 
+                          size="sm" 
+                          mx="auto" 
+                          color="white" // Change input text color if needed
+                          variant="outline" // Add variant to ensure it has proper styling
+                        />
+                      </Box>
+                    </Text>
+                    {item.loading ? (
+                      <Spinner size="sm" color="white" />
+                    ) : (
+                      <>
+                        <Text mb={2} color="white"><b>Unit Price</b> {item.unitPrice}</Text>
+                        <Text mb={4} color="white"><b>Total Price</b> {item.totalPrice}</Text>
+                      </>
+                    )}
+                  </CardBody>
+                  <CardFooter>
+                    <Button 
+                      onClick={() => handleRemoveFromCart(index)} 
+                      colorScheme="red" 
+                      size="sm"
+                      textAlign="center" 
+                      width="100%" 
+                    >
+                      Remove
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </Stack>
+            <Button 
+              onClick={onClose} 
+              colorScheme="teal" 
+              width="100%"
+            >
+              Close
+            </Button>
+          </Box>
+        )}
       </Box>
     </ChakraProvider>
   );
